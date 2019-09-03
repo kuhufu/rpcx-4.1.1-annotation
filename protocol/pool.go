@@ -2,6 +2,7 @@ package protocol
 
 import "sync"
 
+//用sync.Pool来做优化
 var msgPool = sync.Pool{
 	New: func() interface{} {
 		header := Header([12]byte{})

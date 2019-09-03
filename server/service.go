@@ -51,11 +51,13 @@ func isExported(name string) bool {
 }
 
 func isExportedOrBuiltinType(t reflect.Type) bool {
-	for t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	for t.Kind() == reflect.Ptr { //判断 t 的类型是否是指针
+		t = t.Elem() // t重新赋值为t所指向的具体类型
 	}
 	// PkgPath will be non-empty even for an exported type,
 	// so we need to check the type name as well.
+	// 类型名首字母大写才是可导出类型。
+	// go的内建类型的PkgPath为空。
 	return isExported(t.Name()) || t.PkgPath() == ""
 }
 
@@ -154,6 +156,7 @@ func (s *Server) register(rcvr interface{}, name string, useName bool) (string, 
 		var errorStr string
 
 		// To help the user, see if a pointer receiver would work.
+		// 这也行，rcvr不是指针类型，就帮你生成指针类型
 		method := suitableMethods(reflect.PtrTo(service.typ), false)
 		if len(method) != 0 {
 			errorStr = "rpcx.Register: type " + sname + " has no exported methods of suitable type (hint: pass a pointer to value of that type)"
@@ -167,6 +170,7 @@ func (s *Server) register(rcvr interface{}, name string, useName bool) (string, 
 	return sname, nil
 }
 
+//注册函数
 func (s *Server) registerFunction(servicePath string, fn interface{}, name string, useName bool) (string, error) {
 	s.serviceMapMu.Lock()
 	defer s.serviceMapMu.Unlock()
@@ -206,7 +210,7 @@ func (s *Server) registerFunction(servicePath string, fn interface{}, name strin
 	}
 
 	t := f.Type()
-	if t.NumIn() != 3 {
+	if t.NumIn() != 3 { //函数没有接收器，所以参数个数为3
 		return fname, fmt.Errorf("rpcx.registerFunction: has wrong number of ins: %s", f.Type().String())
 	}
 	if t.NumOut() != 1 {
@@ -248,6 +252,7 @@ func (s *Server) registerFunction(servicePath string, fn interface{}, name strin
 
 // suitableMethods returns suitable Rpc methods of typ, it will report
 // error using log if reportErr is true.
+// suitableMethods 返回该类型合适的Rpc方法，它会使用log汇报错误，如果reportErr是true
 func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 	methods := make(map[string]*methodType)
 	for m := 0; m < typ.NumMethod(); m++ {
@@ -255,10 +260,12 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 		mtype := method.Type
 		mname := method.Name
 		// Method must be exported.
+		// 方法必须是导出的
 		if method.PkgPath != "" {
 			continue
 		}
 		// Method needs four ins: receiver, context.Context, *args, *reply.
+		// 方法需要4个输入，接收器，context，参数指针，响应指针
 		if mtype.NumIn() != 4 {
 			if reportErr {
 				log.Info("method", mname, " has wrong number of ins:", mtype.NumIn())
@@ -266,8 +273,9 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			continue
 		}
 		// First arg must be context.Context
-		ctxType := mtype.In(1)
-		if !ctxType.Implements(typeOfContext) {
+		// 方法的第一个参数（context）必须是context.Context
+		ctxType := mtype.In(1)                  //0是接收器
+		if !ctxType.Implements(typeOfContext) { //检查是否实现了context.Context接口
 			if reportErr {
 				log.Info("method", mname, " must use context.Context as the first parameter")
 			}
@@ -275,6 +283,7 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 		}
 
 		// Second arg need not be a pointer.
+		// 方法的第二个参数（请求参数） “不需要” 是一个指针，也就是说，可以是指针，也可以不是指针
 		argType := mtype.In(2)
 		if !isExportedOrBuiltinType(argType) {
 			if reportErr {
@@ -283,6 +292,7 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			continue
 		}
 		// Third arg must be a pointer.
+		// 第三个参数（响应）必须是一个指针
 		replyType := mtype.In(3)
 		if replyType.Kind() != reflect.Ptr {
 			if reportErr {
@@ -291,6 +301,7 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			continue
 		}
 		// Reply type must be exported.
+		// 响应的类型必须是导出的
 		if !isExportedOrBuiltinType(replyType) {
 			if reportErr {
 				log.Info("method", mname, " reply type not exported:", replyType)
@@ -298,6 +309,7 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			continue
 		}
 		// Method needs one out.
+		// 方法的返回值必须只有一个
 		if mtype.NumOut() != 1 {
 			if reportErr {
 				log.Info("method", mname, " has wrong number of outs:", mtype.NumOut())
@@ -305,6 +317,7 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			continue
 		}
 		// The return type of the method must be error.
+		// 返回值的类型必须是error
 		if returnType := mtype.Out(0); returnType != typeOfError {
 			if reportErr {
 				log.Info("method", mname, " returns ", returnType.String(), " not error")
@@ -321,6 +334,8 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 
 // UnregisterAll unregisters all services.
 // You can call this method when you want to shutdown/upgrade this node.
+// 移除所有注册了的服务
+// 当你想要关闭/升级这个结点的时候，你可以调用这个方法
 func (s *Server) UnregisterAll() error {
 	if s.Plugins == nil {
 		s.Plugins = &pluginContainer{}

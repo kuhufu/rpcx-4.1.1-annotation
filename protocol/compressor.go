@@ -11,6 +11,7 @@ type Compressor interface {
 }
 
 // GzipCompressor implements gzip compressor.
+// 使用Gzip压缩
 type GzipCompressor struct {
 }
 
@@ -22,6 +23,7 @@ func (c GzipCompressor) Unzip(data []byte) ([]byte, error) {
 	return util.Unzip(data)
 }
 
+// 不压缩
 type RawDataCompressor struct {
 }
 

@@ -88,6 +88,7 @@ type Server struct {
 	// AuthFunc can be used to auth.
 	AuthFunc func(ctx context.Context, req *protocol.Message, token string) error
 
+	// 正在处理的消息数量
 	handlerMsgNum int32
 }
 
@@ -305,9 +306,9 @@ func (s *Server) serveConn(conn net.Conn) {
 			log.Errorf("serving %s panic error: %s, stack:\n %s", conn.RemoteAddr(), err, buf)
 		}
 		s.mu.Lock()
-		delete(s.activeConn, conn)
+		delete(s.activeConn, conn) //删除活跃连接
 		s.mu.Unlock()
-		conn.Close()
+		conn.Close() //关闭连接
 
 		if s.Plugins == nil {
 			s.Plugins = &pluginContainer{}
@@ -316,7 +317,10 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.Plugins.DoPostConnClose(conn)
 	}()
 
-	if isShutdown(s) {
+	if isShutdown(s) { //检查服务是否已关闭
+		// 删除活跃连接和关闭连接
+		// 感觉多余了，跟defer函数中做的事情重复了，
+		// 难道是为了在最短时间内关闭？
 		closeChannel(s, conn)
 		return
 	}
@@ -337,7 +341,7 @@ func (s *Server) serveConn(conn net.Conn) {
 	r := bufio.NewReaderSize(conn, ReaderBuffsize)
 
 	for {
-		if isShutdown(s) {
+		if isShutdown(s) { //每次循环都检查服务是否已关闭
 			closeChannel(s, conn)
 			return
 		}
@@ -349,8 +353,9 @@ func (s *Server) serveConn(conn net.Conn) {
 
 		ctx := share.WithValue(context.Background(), RemoteConnContextKey, conn)
 
+		//解析请求
 		req, err := s.readRequest(ctx, r)
-		if err != nil {
+		if err != nil { //解析到【不完整】的请求，根据错误类型打印日志
 			if err == io.EOF {
 				log.Infof("client has closed this connection: %s", conn.RemoteAddr().String())
 			} else if strings.Contains(err.Error(), "use of closed network connection") {
@@ -366,18 +371,18 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 
 		ctx = share.WithLocalValue(ctx, StartRequestContextKey, time.Now().UnixNano())
-		if !req.IsHeartbeat() {
+		if !req.IsHeartbeat() { //不是心跳请求就要认证
 			err = s.auth(ctx, req)
 		}
 
-		if err != nil {
-			if !req.IsOneway() {
-				res := req.Clone()
+		if err != nil { //认证失败
+			if !req.IsOneway() { //双向请求（单向请求没有响应）
+				res := req.Clone() //复制请求，不用再设置响应中与请求重复的域
 				res.SetMessageType(protocol.Response)
-				if len(res.Payload) > 1024 && req.CompressType() != protocol.None {
+				if len(res.Payload) > 1024 && req.CompressType() != protocol.None { //payload太大且配置了压缩
 					res.SetCompressType(req.CompressType())
 				}
-				handleError(res, err)
+				handleError(res, err) //将res设置为错误状态
 				data := res.Encode()
 
 				s.Plugins.DoPreWriteResponse(ctx, req, res)
@@ -390,8 +395,10 @@ func (s *Server) serveConn(conn net.Conn) {
 			protocol.FreeMsg(req)
 			continue
 		}
+
+		//创建一个新的协程来响应
 		go func() {
-			atomic.AddInt32(&s.handlerMsgNum, 1)
+			atomic.AddInt32(&s.handlerMsgNum, 1) //正在处理的消息计数
 			defer func() {
 				atomic.AddInt32(&s.handlerMsgNum, -1)
 			}()
@@ -480,6 +487,7 @@ func (s *Server) auth(ctx context.Context, req *protocol.Message) error {
 	return nil
 }
 
+//处理请求，调用服务相关方法/函数，生成响应
 func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
 	serviceName := req.ServicePath
 	methodName := req.ServiceMethod
@@ -601,7 +609,7 @@ func (s *Server) handleRequestForFunction(ctx context.Context, req *protocol.Mes
 }
 
 func handleError(res *protocol.Message, err error) (*protocol.Message, error) {
-	res.SetMessageStatusType(protocol.Error)
+	res.SetMessageStatusType(protocol.Error) //将消息状态设置为 error
 	if res.Metadata == nil {
 		res.Metadata = make(map[string]string)
 	}

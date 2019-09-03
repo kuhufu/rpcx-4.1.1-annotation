@@ -10,6 +10,8 @@ import (
 	"github.com/smallnest/rpcx/util"
 )
 
+// rpcx消息协议详解：https://doc.rpcx.site/part5/protocol.html
+
 var (
 	// Compressors are compressors supported by rpcx. You can add customized compressor in Compressors.
 	Compressors = map[CompressType]Compressor{
@@ -94,7 +96,7 @@ const (
 
 // Message is the generic type of Request and Response.
 type Message struct {
-	*Header
+	*Header       //rpcx的消息头部，头部包含了很多信息，详情请看当前文件的头部链接
 	ServicePath   string
 	ServiceMethod string
 	Metadata      map[string]string
@@ -359,6 +361,7 @@ func encodeMetadata(m map[string]string) []byte {
 	return buf.Bytes()
 }
 
+//解码meta
 func decodeMetadata(l uint32, data []byte) (map[string]string, error) {
 	m := make(map[string]string, 10)
 	n := uint32(0)
@@ -398,10 +401,11 @@ func Read(r io.Reader) (*Message, error) {
 }
 
 // Decode decodes a message from reader.
+// rpcx消息协议详解：https://doc.rpcx.site/part5/protocol.html
 func (m *Message) Decode(r io.Reader) error {
 	// validate rest length for each step?
 
-	// parse header
+	// parse header 解析rpcx消息的头部
 	_, err := io.ReadFull(r, m.Header[:1])
 	if err != nil {
 		return err
@@ -430,7 +434,7 @@ func (m *Message) Decode(r io.Reader) error {
 	}
 
 	totalL := int(l)
-	if cap(m.data) >= totalL { //reuse data
+	if cap(m.data) >= totalL { //reuse data 一个优化，重用data域
 		m.data = m.data[:totalL]
 	} else {
 		m.data = make([]byte, totalL)
@@ -442,21 +446,21 @@ func (m *Message) Decode(r io.Reader) error {
 	}
 
 	n := 0
-	// parse servicePath
+	// parse servicePath 解析服务路径
 	l = binary.BigEndian.Uint32(data[n:4])
 	n = n + 4
 	nEnd := n + int(l)
 	m.ServicePath = util.SliceByteToString(data[n:nEnd])
 	n = nEnd
 
-	// parse serviceMethod
+	// parse serviceMethod 解析服务方法
 	l = binary.BigEndian.Uint32(data[n : n+4])
 	n = n + 4
 	nEnd = n + int(l)
 	m.ServiceMethod = util.SliceByteToString(data[n:nEnd])
 	n = nEnd
 
-	// parse meta
+	// parse meta 解析元数据
 	l = binary.BigEndian.Uint32(data[n : n+4])
 	n = n + 4
 	nEnd = n + int(l)
@@ -469,12 +473,13 @@ func (m *Message) Decode(r io.Reader) error {
 	}
 	n = nEnd
 
-	// parse payload
+	// parse payload 解析有效载荷
 	l = binary.BigEndian.Uint32(data[n : n+4])
 	_ = l
 	n = n + 4
 	m.Payload = data[n:]
 
+	// 将压缩过的有效载荷解压
 	if m.CompressType() != None {
 		compressor := Compressors[m.CompressType()]
 		if compressor == nil {

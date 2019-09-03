@@ -18,6 +18,10 @@ import (
 	"github.com/soheilhy/cmux"
 )
 
+/*
+这是一个http网关，接收http请求，并将http请求转换为rpcx请求。这样rpcx就可以通过http网关支持跨语言调用。
+*/
+
 func (s *Server) startGateway(network string, ln net.Listener) net.Listener {
 	if network != "tcp" && network != "tcp4" && network != "tcp6" {
 		log.Infof("network is not tcp/tcp4/tcp6 so can not start gateway")

@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+/*
+server启动时的配置函数
+*/
+
 // OptionFn configures options of server.
 type OptionFn func(*Server)
 
