@@ -52,6 +52,7 @@ require (
 	github.com/rs/cors v1.6.0
 	github.com/rubyist/circuitbreaker v2.2.1+incompatible
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec // indirect
+	github.com/smallnest/libkv-etcdv3-store v0.0.0-20190827025031-6b33215321f0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/tatsushid/go-fastping v0.0.0-20160109021039-d7bb493dee3e
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect

@@ -75,6 +75,9 @@ func (p *EtcdRegisterPlugin) Start() error {
 			defer p.kv.Close()
 
 			// refresh service TTL
+			// 通过TTL和定期Put来实现注册中心对服务提供者的健康检查，
+			// 在key过期后，watch这个键的服务消费者，就会将这个键对应的服务地址从路由列表中删除，
+			// 厉害厉害，还能这样做
 			for {
 				select {
 				case <-p.dying:
